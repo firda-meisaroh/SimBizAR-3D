@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SimBizAR 3D — Simulasi Bisnis Digital & Rantai Pasok Keripik Tempe Malang</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: rgba(15, 23, 42, 0.92);
+      --border: #334155;
+      --accent: #f59e0b;
+      --accent-2: #10b981;
+      --danger: #ef4444;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body { background: var(--bg); color: var(--text); overflow: hidden; height: 100vh; width: 100vw; }
+    #canvas-container { position: fixed; inset: 0; z-index: 1; }
+    video#ar-camera { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; display: none; }
+
+    /* Top HUD */
+    .hud-top {
+      position: fixed; top: 14px; left: 14px; right: 14px; z-index: 10;
+      display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+      padding: 10px 16px; backdrop-filter: blur(10px);
+    }
+    .brand h1 { font-size: 1.05rem; color: var(--accent); letter-spacing: 0.3px; }
+    .brand p { font-size: 0.78rem; color: var(--muted); }
+    .kpi-bar { display: flex; gap: 14px; flex-wrap: wrap; }
+    .kpi { background: #1e293b; border: 1px solid #334155; padding: 6px 12px; border-radius: 8px; text-align: center; min-width: 105px; }
+    .kpi span { display: block; font-size: 0.68rem; color: var(--muted); text-transform: uppercase; }
+    .kpi strong { font-size: 0.95rem; color: var(--accent-2); }
+    .mode-btns { display: flex; gap: 8px; }
+    button {
+      background: #1e293b; color: var(--text); border: 1px solid #475569;
+      padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 0.82rem; font-weight: 600;
+      transition: all 0.2s;
+    }
+    button:hover { border-color: var(--accent); color: var(--accent); }
+    button.primary { background: var(--accent); color: #0f172a; border-color: var(--accent); }
+    button.primary:hover { background: #fbbf24; }
+    button.active { background: var(--accent-2); color: #0f172a; border-color: var(--accent-2); }
+
+    /* Left Panel: 3 Interactive Nodes + GenAI Scenario */
+    .hud-left {
+      position: fixed; top: 88px; left: 14px; width: 340px; max-height: calc(100vh - 104px);
+      overflow-y: auto; z-index: 10; background: var(--panel); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px; backdrop-filter: blur(10px);
+    }
+    .section-title {
+      font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px;
+      color: var(--accent); margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .badge { background: rgba(245,158,11,0.18); color: var(--accent); padding: 2px 7px; border-radius: 99px; font-size: 0.7rem; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 11px; margin-bottom: 12px; }
+    .node-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
+    .node-tab { font-size: 0.75rem; padding: 7px 4px; text-align: center; }
+    .node-tab.selected { background: var(--accent); color: #0f172a; border-color: var(--accent); }
+    label { display: block; font-size: 0.78rem; color: var(--muted); margin: 8px 0 4px; }
+    select, input[type="range"] { width: 100%; }
+    select { background: #0f172a; color: var(--text); border: 1px solid #475569; padding: 6px 8px; border-radius: 6px; font-size: 0.82rem; }
+    .val-row { display: flex; justify-content: space-between; font-size: 0.78rem; color: #e2e8f0; }
+
+    /* Right Panel: GenAI Dynamic Challenge & Evaluator */
+    .hud-right {
+      position: fixed; top: 88px; right: 14px; width: 340px; max-height: calc(100vh - 104px);
+      overflow-y: auto; z-index: 10; background: var(--panel); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px; backdrop-filter: blur(10px);
+    }
+    .ai-box {
+      background: linear-gradient(135deg, rgba(16,185,129,0.12), rgba(245,158,11,0.12));
+      border: 1px solid rgba(16,185,129,0.4); border-radius: 10px; padding: 11px; margin-bottom: 10px;
+      font-size: 0.82rem; line-height: 1.45;
+    }
+    .ai-box strong { color: var(--accent-2); }
+    .feedback-box {
+      background: #0f172a; border-left: 3px solid var(--accent); padding: 9px 10px;
+      border-radius: 6px; font-size: 0.8rem; line-height: 1.45; color: #e2e8f0; margin-top: 8px;
+    }
+    .progress-bar { height: 6px; background: #334155; border-radius: 99px; overflow: hidden; margin-top: 6px; }
+    .progress-fill { height: 100%; background: var(--accent-2); width: 33%; transition: width 0.3s; }
+
+    /* Bottom Tip */
+    .hud-bottom {
+      position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 10;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 99px;
+      padding: 6px 16px; font-size: 0.76rem; color: var(--muted); white-space: nowrap;
+    }
+    @media (max-width: 900px) {
+      .hud-left, .hud-right { width: 280px; font-size: 0.8rem; }
+      .hud-bottom { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Kamera untuk Mode Web-AR -->
+  <video id="ar-camera" autoplay playsinline muted></video>
+  <!-- Kanvas 3D WebGL / VR -->
+  <div id="canvas-container"></div>
+
+  <!-- HUD ATAS -->
+  <div class="hud-top">
+    <div class="brand">
+      <h1>SimBizAR 3D • Rantai Nilai Digital UMKM Sanan Malang</h1>
+      <p>Mata Kuliah: Simulasi Bisnis Digital (BD7235) | Durasi Belajar Mandiri: 15–20 Menit</p>
+    </div>
+    <div class="kpi-bar">
+      <div class="kpi"><span>Profit Bersih / Bln</span><strong id="kpi-profit">Rp 18,5 Jt</strong></div>
+      <div class="kpi"><span>Konversi Digital</span><strong id="kpi-conv">4,2%</strong></div>
+      <div class="kpi"><span>Indeks Sustainability</span><strong id="kpi-esg">78 / 100</strong></div>
+    </div>
+    <div class="mode-btns">
+      <button id="btn-vr" class="active" onclick="setMode('VR')">Mode VR 3D</button>
+      <button id="btn-ar" onclick="setMode('AR')">Mode AR Kamera</button>
+      <button onclick="toggleAudio()">🔊 Narasi</button>
+    </div>
+  </div>
+
+  <!-- PANEL KIRI: 3 TITIK INTERAKSI AKTIF (MANIPULASI OBJEK & KEPUTUSAN BISNIS) -->
+  <div class="hud-left">
+    <div class="section-title">
+      <span>Titik Interaksi 3D (3 Node)</span>
+      <span class="badge" id="step-badge">Tahap 1/3</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+    <p style="font-size:0.75rem; color:var(--muted); margin:8px 0;">
+      Klik objek 3D di layar atau pilih tab di bawah untuk memanipulasi variabel bisnis UMKM Sentra Keripik Tempe Sanan:
+    </p>
+
+    <div class="node-tabs">
+      <button class="node-tab selected" id="tab-1" onclick="selectNode(1)">1. Produksi IoT</button>
+      <button class="node-tab" id="tab-2" onclick="selectNode(2)">2. Omnichannel</button>
+      <button class="node-tab" id="tab-3" onclick="selectNode(3)">3. Logistik Hijau</button>
+    </div>
+
+    <!-- NODE 1: PRODUKSI & KEARIFAN LOKAL SANAN -->
+    <div class="card" id="panel-node-1">
+      <div class="section-title"><span>Node 1: Dapur Fermentasi & IoT</span><span class="badge">Hulu</span></div>
+      <p style="font-size:0.78rem; color:#cbd5e1; margin-bottom:6px;">
+        Mengatur kapasitas produksi tempe kedelai lokal Malang & sensor suhu fermentasi otomatis.
+      </p>
+      <label>Kapasitas Produksi Harian (Pack): <strong id="lbl-cap">500</strong></label>
+      <input type="range" id="inp-cap" min="200" max="1200" step="50" value="500" oninput="updateSim()" />
+
+      <label>Tingkat Otomasi Sensor Fermentasi IoT:</label>
+      <select id="inp-iot" onchange="updateSim()">
+        <option value="1">Manual Tradisional (Risiko Gagal 12%)</option>
+        <option value="2" selected>Semi-IoT Hygrometer (Risiko Gagal 4%)</option>
+        <option value="3">Smart AI-IoT Ruang Fermentasi (Risiko 1%)</option>
+      </select>
+    </div>
+
+    <!-- NODE 2: PEMASARAN DIGITAL & OMNICHANNEL -->
+    <div class="card" id="panel-node-2" style="display:none;">
+      <div class="section-title"><span>Node 2: Toko Digital & Live Commerce</span><span class="badge">Tengah</span></div>
+      <p style="font-size:0.78rem; color:#cbd5e1; margin-bottom:6px;">
+        Alokasi anggaran promosi digital dan integrasi <em>storytelling</em> kearifan lokal Malang.
+      </p>
+      <label>Anggaran Iklan & Live TikTok/Shopee (Jt/Bln): <strong id="lbl-ads">4.0</strong></label>
+      <input type="range" id="inp-ads" min="1" max="15" step="0.5" value="4" oninput="updateSim()" />
+
+      <label>Strategi Konten & Kemasan Budaya:</label>
+      <select id="inp-brand" onchange="updateSim()">
+        <option value="1">Kemasan Polos Generik (Harga Jual Standar)</option>
+        <option value="2" selected>Desain Topeng Malangan + QR Traceability</option>
+        <option value="3">Bundling Wisata Edukasi Sanan + AR Packaging</option>
+      </select>
+    </div>
+
+    <!-- NODE 3: LOGISTIK RANTAI DINGIN & KEMASAN RAMAH LINGKUNGAN -->
+    <div class="card" id="panel-node-3" style="display:none;">
+      <div class="section-title"><span>Node 3: Hub Distribusi & Cold-Chain</span><span class="badge">Hilir</span></div>
+      <p style="font-size:0.78rem; color:#cbd5e1; margin-bottom:6px;">
+        Menentukan mitra pengiriman nasional & standar kemasan bebas plastik sekali pakai.
+      </p>
+      <label>Jenis Kemasan & Mitigasi Remuk:</label>
+      <select id="inp-pack" onchange="updateSim()">
+        <option value="1">Plastik PP Biasa (Murah, Retur Remuk 9%)</option>
+        <option value="2" selected>Standing Pouch Aluminium Nitrogen (Retur 2%)</option>
+        <option value="3">Kemasan Biodegradable Singkong + N2 (ESG Tinggi)</option>
+      </select>
+
+      <label>Jangkauan Distribusi Digital:</label>
+      <select id="inp-dist" onchange="updateSim()">
+        <option value="1">Lokal Malang Raya & Surabaya</option>
+        <option value="2" selected>Nasional (Jawa - Bali - Sumatra)</option>
+        <option value="3">Ekspor Diaspora (Singapura, Taiwan, Jepang)</option>
+      </select>
+    </div>
+
+    <button class="primary" style="width:100%;" onclick="evaluateDecision()">
+      Analisis Keputusan & Validasi GenAI
+    </button>
+  </div>
+
+  <!-- PANEL KANAN: GENERATOR SKENARIO & TUTOR DIAGNOSTIK GENAI -->
+  <div class="hud-right">
+    <div class="section-title">
+      <span>GenAI Dynamic Scenario Engine</span>
+      <span class="badge">Fungsional AI</span>
+    </div>
+    <div class="ai-box" id="ai-scenario-box">
+      <strong>Skenario Aktif #1 (Musim Libur Panjang Malang):</strong><br/>
+      Lonjakan wisatawan ke Kota Malang meningkatkan permintaan oleh-oleh sebesar +45%, namun harga kedelai impor naik 18%. Optimalkan 3 node di kiri agar <b>Profit ≥ Rp 25 Jt</b> dan <b>Indeks Sustainability ≥ 80</b>!
+    </div>
+    <button style="width:100%; margin-bottom:10px;" onclick="generateNewAIScenario()">
+      ⚡ Generate Skenario Pasar Baru (GenAI)
+    </button>
+
+    <div class="section-title"><span>Umpan Balik Diagnostik AI</span></div>
+    <div class="feedback-box" id="ai-feedback">
+      Ubah parameter pada <b>Node 1, 2, dan 3</b> (atau klik bangunan 3D di tengah layar), lalu tekan <b>"Analisis Keputusan & Validasi GenAI"</b> untuk melihat evaluasi model bisnis digital Anda secara real-time.
+    </div>
+  </div>
+
+  <div class="hud-bottom">
+    🖱️ Drag: Putar 360° • Scroll: Zoom • Klik Bangunan 3D: Pilih Node Interaksi • Mode AR: Aktifkan Kamera
+  </div>
+
+  <script>
+    // ==================== 1. INISIALISASI SCENE 3D (THREE.JS) ====================
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0f172a);
+    scene.fog = new THREE.FogExp2(0x0f172a, 0.025);
+
+    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 8.5, 14);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.maxPolarAngle = Math.PI / 2 - 0.05;
+
+    // Pencahayaan
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+    scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xfffbeb, 0.9);
+    dirLight.position.set(8, 15, 10);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+
+    // Lantai Grid Platform Rantai Pasok Digital
+    const gridHelper = new THREE.GridHelper(22, 22, 0xf59e0b, 0x1e293b);
+    scene.add(gridHelper);
+
+    const groundGeo = new THREE.PlaneGeometry(22, 22);
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x0b1120, roughness: 0.85, transparent: true, opacity: 0.85 });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // ==================== 2. MEMBANGUN 3 OBJEK 3D INTERAKTIF (NODE) ====================
+    const interactiveNodes = [];
+
+    function createNodeBuilding(id, x, z, colorHex, height) {
+      const group = new THREE.Group();
+      group.position.set(x, 0, z);
+
+      // Dasar platform
+      const base = new THREE.Mesh(
+        new THREE.CylinderGeometry(2.1, 2.3, 0.3, 32),
+        new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.4, roughness: 0.5 })
+      );
+      base.position.y = 0.15;
+      group.add(base);
+
+      // Gedung utama yang skalanya berubah dinamis sesuai input
+      const bodyMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.35, metalness: 0.2 });
+      const body = new THREE.Mesh(new THREE.BoxGeometry(2.4, height, 2.4), bodyMat);
+      body.position.y = height / 2 + 0.3;
+      body.castShadow = true;
+      body.userData = { nodeId: id };
+      group.add(body);
+
+      // Atap Joglo / Limasan Modern (Representasi Kearifan Lokal Malang)
+      const roof = new THREE.Mesh(
+        new THREE.ConeGeometry(2.0, 1.1, 4),
+        new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.5 })
+      );
+      roof.position.y = height + 0.85;
+      roof.rotation.y = Math.PI / 4;
+      roof.userData = { nodeId: id };
+      group.add(roof);
+
+      // Cincin indikator seleksi
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(2.35, 2.55, 32),
+        new THREE.MeshBasicMaterial({ color: 0xf59e0b, side: THREE.DoubleSide })
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.05;
+      ring.visible = (id === 1);
+      group.add(ring);
+
+      scene.add(group);
+      interactiveNodes.push({ id, group, body, roof, ring });
+      return group;
+    }
+
+    createNodeBuilding(1, -5.5, 0, 0x3b82f6, 2.6); // Node 1: Produksi IoT
+    createNodeBuilding(2, 0, -2.5, 0x10b981, 3.0);  // Node 2: Omnichannel Digital
+    createNodeBuilding(3, 5.5, 0, 0x8b5cf6, 2.4);   // Node 3: Logistik Hijau
+
+    // Jalur aliran data/barang antar-node (Partikel bergerak)
+    const flowLineGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-5.5, 1.2, 0),
+      new THREE.Vector3(0, 1.2, -2.5),
+      new THREE.Vector3(5.5, 1.2, 0)
+    ]);
+    const flowLine = new THREE.Line(flowLineGeo, new THREE.LineBasicMaterial({ color: 0xf59e0b }));
+    scene.add(flowLine);
+
+    const packet = new THREE.Mesh(
+      new THREE.SphereGeometry(0.28, 16, 16),
+      new THREE.MeshStandardMaterial({ color: 0xfbbf24, emissive: 0xf59e0b, emissiveIntensity: 0.7 })
+    );
+    scene.add(packet);
+
+    // Raycaster untuk klik langsung pada objek 3D
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    window.addEventListener('pointerdown', (e) => {
+      if (e.target.tagName !== 'CANVAS') return;
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const meshes = interactiveNodes.flatMap(n => [n.body, n.roof]);
+      const hits = raycaster.intersectObjects(meshes);
+      if (hits.length > 0 && hits[0].object.userData.nodeId) {
+        selectNode(hits[0].object.userData.nodeId);
+      }
+    });
+
+    // ==================== 3. LOGIKA SIMULASI BISNIS DIGITAL ====================
+    let currentNode = 1;
+    let visitedNodes = new Set([1]);
+    let currentScenarioIdx = 0;
+
+    const aiScenarios = [
+      {
+        title: "Skenario #1 (Musim Libur Panjang Malang)",
+        desc: "Lonjakan wisatawan ke Kota Malang meningkatkan permintaan oleh-oleh +45%, namun harga kedelai naik 18%. Optimalkan 3 node agar <b>Profit ≥ Rp 25 Jt</b> dan <b>Sustainability ≥ 80</b>!",
+        demandMult: 1.35, costMult: 1.15, targetProfit: 25, targetESG: 80
+      },
+      {
+        title: "Skenario #2 (Ekspansi Flash Sale Nasional 11.11)",
+        desc: "Traffic marketplace melonjak 3x lipat dalam 48 jam, namun risiko komplain produk remuk meningkat drastis. Rancang konfigurasi produksi & kemasan agar <b>Profit ≥ Rp 30 Jt</b> tanpa merusak rating toko!",
+        demandMult: 1.55, costMult: 1.10, targetProfit: 30, targetESG: 75
+      },
+      {
+        title: "Skenario #3 (Tuntutan Green Export Diaspora)",
+        desc: "Buyer luar negeri mewajibkan sertifikasi kemasan ramah lingkungan dan keterlacakan bahan baku (QR Traceability). Capai <b>Sustainability ≥ 88</b> dengan <b>Profit ≥ Rp 22 Jt</b>!",
+        demandMult: 1.25, costMult: 1.20, targetProfit: 22, targetESG: 88
+      }
+    ];
+
+    function selectNode(id) {
+      currentNode = id;
+      visitedNodes.add(id);
+      for (let i = 1; i <= 3; i++) {
+        document.getElementById(`panel-node-${i}`).style.display = (i === id) ? 'block' : 'none';
+        document.getElementById(`tab-${i}`).classList.toggle('selected', i === id);
+        const nodeObj = interactiveNodes.find(n => n.id === i);
+        if (nodeObj) nodeObj.ring.visible = (i === id);
+      }
+      document.getElementById('step-badge').textContent = `Tahap ${visitedNodes.size}/3`;
+      document.getElementById('progress-fill').style.width = `${(visitedNodes.size / 3) * 100}%`;
+    }
+
+    function updateSim() {
+      const cap = parseInt(document.getElementById('inp-cap').value);
+      const iot = parseInt(document.getElementById('inp-iot').value);
+      const ads = parseFloat(document.getElementById('inp-ads').value);
+      const brand = parseInt(document.getElementById('inp-brand').value);
+      const pack = parseInt(document.getElementById('inp-pack').value);
+      const dist = parseInt(document.getElementById('inp-dist').value);
+
+      document.getElementById('lbl-cap').textContent = cap;
+      document.getElementById('lbl-ads').textContent = ads.toFixed(1);
+
+      const scen = aiScenarios[currentScenarioIdx];
+
+      // Kalkulasi model bisnis digital
+      const failRate = iot === 1 ? 0.12 : (iot === 2 ? 0.04 : 0.01);
+      const returnRate = pack === 1 ? 0.09 : (pack === 2 ? 0.02 : 0.015);
+      const pricePerPack = brand === 1 ? 15000 : (brand === 2 ? 19500 : 24000);
+      const convRate = (2.2 + (ads * 0.28) + (brand * 0.65)).toFixed(1);
+
+      const effectiveSales = cap * 30 * (1 - failRate) * (1 - returnRate) * Math.min(1, (convRate / 8.5) * scen.demandMult);
+      const revenue = (effectiveSales * pricePerPack) / 1e6; // dalam Juta Rp
+      const cogs = ((cap * 30 * 8500 * scen.costMult) + (iot * 1.8e6) + (ads * 1e6) + (pack * 1.4e6) + (dist * 2.1e6)) / 1e6;
+      const profit = Math.max(-5, revenue - cogs);
+
+      const esgScore = Math.min(100, Math.round(52 + (iot * 7) + (brand * 5) + (pack * 11) - (dist === 3 ? 4 : 0)));
+
+      document.getElementById('kpi-profit').textContent = `Rp ${profit.toFixed(1)} Jt`;
+      document.getElementById('kpi-profit').style.color = profit >= scen.targetProfit ? '#10b981' : '#f59e0b';
+      document.getElementById('kpi-conv').textContent = `${convRate}%`;
+      document.getElementById('kpi-esg').textContent = `${esgScore} / 100`;
+      document.getElementById('kpi-esg').style.color = esgScore >= scen.targetESG ? '#10b981' : '#f59e0b';
+
+      // Perubahan visual tinggi objek 3D secara real-time
+      interactiveNodes[0].body.scale.y = 0.6 + (cap / 800);
+      interactiveNodes[1].body.scale.y = 0.7 + (ads / 10);
+      interactiveNodes[2].body.scale.y = 0.7 + (pack * 0.25);
+
+      return { profit, convRate, esgScore, cap, iot, ads, brand, pack, dist, scen };
+    }
+
+    // ==================== 4. FUNGSI GENERATIVE AI (SCENARIO & DIAGNOSTIC) ====================
+    function generateNewAIScenario() {
+      currentScenarioIdx = (currentScenarioIdx + 1) % aiScenarios.length;
+      const s = aiScenarios[currentScenarioIdx];
+      document.getElementById('ai-scenario-box').innerHTML = `<strong>${s.title}:</strong><br/>${s.desc}`;
+      const res = updateSim();
+      document.getElementById('ai-feedback').innerHTML =
+        `🔄 <b>Skenario Diperbarui oleh GenAI:</b> Parameter pasar telah disesuaikan. Target baru: Profit minimal <b>Rp ${res.scen.targetProfit} Jt</b> dan ESG minimal <b>${res.scen.targetESG}</b>.`;
+    }
+
+    function evaluateDecision() {
+      const r = updateSim();
+      let tips = [];
+      if (r.iot === 1) tips.push("• <b>Hulu:</b> Fermentasi manual memicu tingkat gagal 12%, tingkatkan ke Semi-IoT atau Smart AI-IoT.");
+      if (r.brand === 1) tips.push("• <b>Diferensiasi Lokal:</b> Kemasan polos membuat margin rendah. Gunakan desain Topeng Malangan + QR Traceability untuk menaikkan nilai jual.");
+      if (r.pack === 1 && r.dist >= 2) tips.push("• <b>Logistik:</b> Pengiriman luar kota dengan plastik biasa menyebabkan 9% keripik remuk; beralihlah ke kemasan Nitrogen/Biodegradable.");
+      if (r.ads > 11 && r.cap < 600) tips.push("• <b>Over-Marketing:</b> Anggaran iklan tinggi tidak sebanding dengan kapasitas produksi sehingga memicu <i>stock-out</i>.");
+
+      const passed = (r.profit >= r.scen.targetProfit && r.esgScore >= r.scen.targetESG);
+      const statusHtml = passed
+        ? `<span style="color:#10b981; font-weight:700;">✅ KEPUTUSAN OPTIMAL!</span> Target skenario tercapai (Profit Rp ${r.profit.toFixed(1)} Jt, ESG ${r.esgScore}/100).`
+        : `<span style="color:#f59e0b; font-weight:700;">⚠️ PERLU KALIBRASI STRATEGI:</span> Target skenario belum terpenuhi sepenuhnya.`;
+
+      document.getElementById('ai-feedback').innerHTML = `
+        ${statusHtml}<br/><br/>
+        <b>Analisis Sintesis GenAI:</b><br/>
+        ${tips.length > 0 ? tips.join('<br/>') : '• Sinergi kapasitas produksi, storytelling budaya Malang, dan kemasan ramah lingkungan sudah sangat seimbang!'}
+      `;
+    }
+
+    // ==================== 5. MODE WEB-AR (KAMERA) & AUDIO NARASI ====================
+    let arStream = null;
+    async function setMode(mode) {
+      const video = document.getElementById('ar-camera');
+      document.getElementById('btn-vr').classList.toggle('active', mode === 'VR');
+      document.getElementById('btn-ar').classList.toggle('active', mode === 'AR');
+
+      if (mode === 'AR') {
+        try {
+          arStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          video.srcObject = arStream;
+          video.style.display = 'block';
+          scene.background = null;
+          scene.fog = null;
+          ground.visible = false;
+        } catch (err) {
+          alert('Akses kamera tidak tersedia pada perangkat ini, dialihkan ke simulasi AR latar transparan.');
+          scene.background = new THREE.Color(0x1e293b);
+        }
+      } else {
+        if (arStream) { arStream.getTracks().forEach(t => t.stop()); arStream = null; }
+        video.style.display = 'none';
+        scene.background = new THREE.Color(0x0f172a);
+        scene.fog = new THREE.FogExp2(0x0f172a, 0.025);
+        ground.visible = true;
+      }
+    }
+
+    function toggleAudio() {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const msg = new SpeechSynthesisUtterance(
+          "Selamat datang di SimBizAR 3D, simulasi rantai nilai digital UMKM Keripik Tempe Sanan Malang. Silakan klik tiga titik interaksi untuk menguji keputusan produksi, pemasaran digital, dan logistik berkelanjutan."
+        );
+        msg.lang = 'id-ID';
+        window.speechSynthesis.speak(msg);
+      }
+    }
+
+    // Loop Animasi
+    let t = 0;
+    function animate() {
+      requestAnimationFrame(animate);
+      t += 0.015;
+      // Gerakkan paket data/barang sepanjang rantai pasok 3D
+      const phase = t % 2;
+      if (phase < 1) {
+        packet.position.lerpVectors(new THREE.Vector3(-5.5, 1.4, 0), new THREE.Vector3(0, 1.4, -2.5), phase);
+      } else {
+        packet.position.lerpVectors(new THREE.Vector3(0, 1.4, -2.5), new THREE.Vector3(5.5, 1.4, 0), phase - 1);
+      }
+      interactiveNodes.forEach((n, idx) => {
+        n.roof.position.y = (n.body.scale.y * 2.6) + 0.85 + Math.sin(t * 2 + idx) * 0.04;
+      });
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    updateSim();
+    animate();
+  </script>
+</body>
+</html>
